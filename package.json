@@ -2,13 +2,16 @@
   "name": "sanskritagain-shipping-desk",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p packages/core --noEmit",
     "demo": "tsx scripts/demo.ts",
-    "prisma:validate": "prisma validate --schema prisma/schema.prisma"
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma",
+    "dev": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/web"
   },
   "devDependencies": {
     "@prisma/prisma-schema-wasm": "^6.16.1-1.bb420e667c1820a8c05a38023385f6cc7ef8e83a",

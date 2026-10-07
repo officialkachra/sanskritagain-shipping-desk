@@ -20,3 +20,12 @@ DEMO mode only. No ClickPost dependency. No carrier is contacted; live adapters 
 
 ## Not built yet (see docs/parity-register.csv)
 Next.js UI, auth, Postgres ledger + pg-boss worker, Shopify sync/webhooks, label/manifest/NDR/returns screens, exports, real carrier adapters.
+
+## Web demo (apps/web)
+Next.js App Router, DEMO mode, synthetic orders. Requires two server env vars (never commit them):
+`SESSION_SECRET` (32+ random chars) and `DEMO_LOGIN_PASSWORD`. Without them, login stays switched off.
+
+    npm install
+    SESSION_SECRET=... DEMO_LOGIN_PASSWORD=... npm run dev
+
+Demo state is in memory and resets when the server restarts. Postgres ledger + worker come next.
