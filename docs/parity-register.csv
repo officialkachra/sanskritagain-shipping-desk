@@ -1,0 +1,33 @@
+feature,evidence_state,app_screen,backend_capability,carrier_dependency,demo_acceptance_test,live_readiness,migration_owner,gap
+Shopify order sync (COD/prepaid/tags/SKU/invoice/qty/dates),Observed in current workflow,Orders,Order/OrderLine/FulfillmentOrder schema only,None,Not yet,Blocked: no Shopify sync code yet,Yuvraj,GraphQL import+webhooks not built
+Dispatch stages New/Fulfillment/AWB/RTS/Shipped/Hold/Cancelled,Observed,Dispatch,DispatchStage enum in schema,None,Not yet,Not yet inspected,Yuvraj,State machine + UI not built
+Single and bulk order lookup + filters + reports,Observed,Orders,Not built,None,Not yet,Not yet inspected,Yuvraj,UI/API pending
+Courier priority dropdown / rerun recommendation,Observed,Recommendation,allocate()+diffRecommendation() implemented and tested,None,allocate.test.ts rerun diff,Demo-only,Yuvraj,UI pending
+Ordered-list rules with conditions/priorities,Observed,Rules console,Ordered policies by payment/direction/intent implemented; generic IF/AND conditions NOT yet,None,allocate.test.ts,Demo-only,Yuvraj,Condition DSL + versioning UI pending; exact ClickPost rule export needed
+Filter rules / blacklist / threshold stages,Observed,Rules console,Scoped expiring versioned blacklist implemented; thresholds/capacity NOT yet,None,allocate.test.ts blacklist,Demo-only,Yuvraj,Capacity/time windows pending
+Serviceability and ODA checks,Observed,Recommendation,Tri-state serviceability with source/version in engine,Carrier serviceability files/API,allocate.test.ts unknown serviceability,Blocked: no verified carrier data,Yuvraj,Import pipeline pending
+Performance config RTO80/Pricing20,Observed,Rules console,Advisory smoothed score; never reorders ordered list,Rates + outcomes,allocate.test.ts sparse/missing cost,Demo-only,Yuvraj,Shadow simulation report pending; NOT a PBA clone
+Warehouse/carrier mapping and pickup warehouse,Observed,Admin,Warehouse schema,Carrier pickup codes,Not yet,Not yet inspected,Yuvraj,Pending
+Box types (7) and legacy default,Observed,Packing,Seeded + tested,None,packing.test.ts,Implemented (data),Yuvraj,Tare weights unmeasured
+Packing reference weights,Owner-provided,Packing,Seeded INACTIVE/UNCONFIRMED; exact variant rule matcher,None,packing.test.ts,Demo-only,Packers/Admin,SKU/variant mapping + packaging basis validation needed
+Carrier accounts/credentials/pricing/SLA/EDD cutoff/preassigned AWB/zone/vendor mapping,Observed (not all populated),Admin,CarrierAccount/Service/RateCard schema,Each carrier,Not yet,Blocked: contracts unverified,Yuvraj,Which settings are actually used is unaudited
+Billable/volumetric/slab weight,Required,Packing,estimateBillable per service contract,Rate contracts,packing.test.ts,Blocked: divisors/slabs unknown,Yuvraj,Need rate contracts
+Approval + stale invalidation + batch scope,Required,Booking review,checkApproval/batchCovers implemented,None,booking.test.ts,Demo-only,Yuvraj,UI pending
+Booking ledger (idempotent/timeout/reconcile),Required,Booking review,bookShipment + MemoryLedger implemented,Carrier reconcile support,booking.test.ts,Demo-only,Yuvraj,Postgres ledger + worker pending
+Labels print/reprint ledger,Observed,Labels,LabelBatch/Document schema,Carrier document APIs,Not yet,Blocked,Yuvraj,Pending
+Tracking timeline + normalization,Observed,Tracking,mergeEvents/terminal stop implemented,Carrier tracking/webhooks,tracking-metrics.test.ts,Demo-only,Yuvraj,Status maps per carrier pending
+NDR desk,Observed,NDR,NdrCase schema,Carrier NDR actions,Not yet,Blocked,Support,Pending
+Subusers/roles,Observed,Admin,User/Role/Permission schema; approver role check in core,None,booking.test.ts packer denial,Demo-only,Yuvraj,Auth library + server enforcement pending
+Exports and courier/city/pincode/TAT analysis,Observed,Reports,cohortReport closedRTO/median/p90,None,tracking-metrics.test.ts,Demo-only,Yuvraj,Export jobs + PII roles pending
+Express shipping signal,Required,Orders,mapShippingIntent with raw preserved,None,allocate.test.ts,Demo-only,Yuvraj,Exact Shopify field/titles needed
+Manifests / pickup / handover proof,Parity candidate,Manifest,Schema only,Carrier,Not yet,Not yet inspected,Yuvraj,Pending
+POD view/download,Parity candidate,Shipment,Schema only,Carrier,Not yet,Not yet inspected,Yuvraj,Pending
+Label configuration,Parity candidate,Labels,Not built,Carrier,Not yet,Not yet inspected,Yuvraj,Pending
+Holiday calendars / transit / EDD rules,Parity candidate,Admin,HolidayCalendar schema,Carrier,Not yet,Not yet inspected,Yuvraj,Pending
+Order-confirmation journey,Parity candidate,—,Not built,WhatsApp/email provider,Not yet,Not yet inspected,Yuvraj,Usage unaudited
+Communication channels/templates,Parity candidate,—,Not built,Messaging provider,Not yet,Not yet inspected,Yuvraj,No auto-send by default
+Customer tracking page,Parity candidate,—,Not built,Tracking,Not yet,Not yet inspected,Yuvraj,Pending
+Reverse shipments/returns/exchanges,Parity candidate,Returns,ReturnCase schema,Carrier reverse,Not yet,Not yet inspected,Yuvraj,Pending
+NPR,Parity candidate,NDR,NprCase schema,Carrier,Not yet,Not yet inspected,Support,Pending
+Quick-commerce settings,Parity candidate,—,Not built,Unknown,Not yet,Not yet inspected,Yuvraj,Usage unaudited
+COD remittance reconciliation,Requested,Reports,CodRemittance schema,Carrier remittance files,Not yet,Not yet inspected,Yuvraj,Data source may not be in shipping APIs

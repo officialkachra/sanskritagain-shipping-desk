@@ -1,0 +1,488 @@
+// SanskritAgain Shipping Desk — Phase 1 schema. Money in paise, weight in grams, timestamps UTC.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+
+
+enum IntegrationMode {
+  DEMO
+  SANDBOX
+  LIVE_READ
+  LIVE_WRITE
+}
+
+enum PaymentMode {
+  PREPAID
+  COD
+}
+
+enum Direction {
+  FORWARD
+  REVERSE
+}
+
+enum ShippingIntent {
+  STANDARD
+  EXPRESS
+  UNKNOWN
+}
+
+enum DispatchStage {
+  NEW_CASE
+  FULFILLMENT
+  AWB_GENERATED
+  READY_TO_SHIP
+  SHIPPED
+  ON_HOLD
+  CANCELLED
+}
+
+enum BookingState {
+  IN_FLIGHT
+  CONFIRMED
+  UNKNOWN_OUTCOME
+  FAILED
+  MANUAL_RECONCILIATION
+}
+
+enum ParityState {
+  IMPLEMENTED
+  DEMO_ONLY
+  LIVE_VERIFIED
+  BLOCKED
+  NOT_YET_INSPECTED
+}
+
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  name String
+  mfaEnabled Boolean @default(false)
+  disabledAt DateTime?
+  roles UserRole[]
+  sessionsRevokedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Role {
+  id String @id @default(cuid())
+  key String @unique
+  name String
+  permissions RolePermission[]
+  users UserRole[]
+}
+
+model Permission {
+  id String @id @default(cuid())
+  key String @unique
+  description String
+  roles RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId String
+  permissionId String
+  role Role @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+  @@id([roleId, permissionId])
+}
+
+
+model Warehouse {
+  id String @id @default(cuid())
+  code String @unique
+  name String
+  addressJson Json
+  gstin String?
+  pincode String
+  cutoffLocalTime String?
+  active Boolean @default(true)
+}
+
+
+model CarrierAccount {
+  id String @id @default(cuid())
+  carrier String
+  name String
+  environment IntegrationMode @default(DEMO)
+  secretRef String?
+  readEnabled Boolean @default(false)
+  writeEnabled Boolean @default(false)
+  contractVerifiedAt DateTime?
+  services Service[]
+}
+
+model Service {
+  id String @id
+  carrierAccountId String
+  account CarrierAccount @relation(fields: [carrierAccountId], references: [id])
+  label String
+  transport String
+  payments PaymentMode[]
+  directions Direction[]
+  maxWeightG Int?
+  volumetricDivisor Int?
+  slabG Int?
+  enabled Boolean @default(false)
+  legacyClickpostLabel String?
+  capabilities Capability[]
+  rateCards RateCard[]
+}
+
+model Capability {
+  id String @id @default(cuid())
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id])
+  name String
+  state ParityState
+  notes String?
+  verifiedAt DateTime?
+  @@unique([serviceId, name])
+}
+
+model RateCard {
+  id String @id @default(cuid())
+  serviceId String
+  service Service @relation(fields: [serviceId], references: [id])
+  version Int
+  effectiveFrom DateTime
+  source String
+  payload Json
+  @@unique([serviceId, version])
+}
+
+model ServiceabilityVersion {
+  id String @id @default(cuid())
+  serviceId String
+  version String
+  importedAt DateTime @default(now())
+  source String
+  rowCount Int
+  active Boolean @default(false)
+}
+
+model HolidayCalendar {
+  id String @id @default(cuid())
+  scope String
+  date DateTime @db.Date
+  reason String
+}
+
+
+model ProductMapping {
+  id String @id @default(cuid())
+  variantId String @unique
+  sku String?
+  language String?
+  format String?
+  productGroup String?
+  approvedBy String?
+  approvedAt DateTime?
+}
+
+model BundlePackingRule {
+  id String @id @default(cuid())
+  version Int
+  components Json
+  packageWeightG Int
+  boxCode String
+  weightIncludesPackaging Boolean
+  status String @default("INACTIVE_REFERENCE")
+  weightBasis String @default("UNCONFIRMED")
+  sourceNote String?
+  approvedBy String?
+  approvedAt DateTime?
+}
+
+model BoxType {
+  code String @id
+  lengthCm Decimal
+  breadthCm Decimal
+  heightCm Decimal
+  tareG Int?
+  legacyDefault Boolean @default(false)
+  active Boolean @default(true)
+}
+
+
+model Order {
+  id String @id @default(cuid())
+  shopifyOrderId String @unique
+  name String
+  payment PaymentMode
+  intent ShippingIntent
+  rawShippingMethod String?
+  tags String[]
+  codAmountPaise Int
+  invoiceTotalPaise Int
+  stage DispatchStage @default(NEW_CASE)
+  holdReason String?
+  shopifyFinancialStatus String?
+  shopifyFulfillmentStatus String?
+  placedAt DateTime
+  lines OrderLine[]
+  fulfillmentOrders FulfillmentOrder[]
+}
+
+model OrderLine {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  shopifyLineId String @unique
+  variantId String?
+  sku String?
+  title String
+  qty Int
+  unitPricePaise Int
+}
+
+model FulfillmentOrder {
+  id String @id @default(cuid())
+  orderId String
+  order Order @relation(fields: [orderId], references: [id])
+  shopifyFulfillmentOrderId String @unique
+  locationId String
+  status String
+}
+
+model PackingDraft {
+  id String @id @default(cuid())
+  orderId String
+  businessRef String @unique
+  lines Json
+  packedWeightG Int?
+  boxCode String?
+  warehouseId String
+  preparedBy String
+  stockChecked Boolean @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model Approval {
+  id String @id @default(cuid())
+  businessRef String
+  snapshotHash String
+  approvedBy String
+  role String
+  batchId String?
+  approvedAt DateTime @default(now())
+  invalidatedAt DateTime?
+  invalidReason String?
+}
+
+
+model RuleVersion {
+  id String @id @default(cuid())
+  version String @unique
+  state String
+  payload Json
+  createdBy String
+  createdAt DateTime @default(now())
+  activatedAt DateTime?
+  activatedBy String?
+  simulationReportId String?
+}
+
+model RecommendationSnapshot {
+  id String @id @default(cuid())
+  businessRef String
+  ruleVersion String
+  status String
+  payload Json
+  createdAt DateTime @default(now())
+}
+
+
+model Shipment {
+  id String @id @default(cuid())
+  businessRef String @unique
+  orderId String
+  serviceId String
+  snapshotHash String
+  awb String? @unique
+  bookingState BookingState
+  isExternalHistorical Boolean @default(false)
+  parentShipmentId String?
+  createdAt DateTime @default(now())
+  attempts BookingAttempt[]
+  documents Document[]
+  events TrackingEvent[]
+}
+
+model BookingAttempt {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+  at DateTime @default(now())
+  outcome String
+  providerCode String?
+  correlationId String
+  rawRedacted Json?
+}
+
+model Document {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+  kind String
+  format String
+  storageKey String
+  sha256 String
+  fetchedAt DateTime
+}
+
+model LabelBatch {
+  id String @id @default(cuid())
+  createdBy String
+  createdAt DateTime @default(now())
+  layout String
+  shipmentIds String[]
+  reprintOf String?
+  reason String?
+}
+
+model Manifest {
+  id String @id @default(cuid())
+  carrierAccountId String
+  warehouseId String
+  dispatchDate DateTime @db.Date
+  status String
+  awbs String[]
+  providerRef String?
+}
+
+model PickupRequest {
+  id String @id @default(cuid())
+  manifestId String?
+  status String
+  requestedBy String
+  approvedBy String?
+  providerRef String?
+}
+
+model Handover {
+  id String @id @default(cuid())
+  manifestId String
+  handedAt DateTime
+  proofKey String?
+  missingAwbs String[]
+  recordedBy String
+}
+
+model CodRemittance {
+  id String @id @default(cuid())
+  carrierAccountId String
+  utr String?
+  periodFrom DateTime
+  periodTo DateTime
+  amountPaise Int
+  source String
+}
+
+
+model TrackingEvent {
+  id String @id @default(cuid())
+  shipmentId String
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
+  dedupeKey String @unique
+  providerStatus String
+  canonical String
+  occurredAt DateTime
+  sourceTz String
+  location String?
+  receivedAt DateTime @default(now())
+}
+
+model NdrCase {
+  id String @id @default(cuid())
+  shipmentId String
+  status String
+  reason String
+  assigneeId String?
+  dueAt DateTime?
+  attempts Int @default(0)
+  notes Json
+  resolvedAt DateTime?
+}
+
+model NprCase {
+  id String @id @default(cuid())
+  shipmentId String
+  status String
+  reason String
+  resolvedAt DateTime?
+}
+
+model ReturnCase {
+  id String @id @default(cuid())
+  originalOrderId String
+  kind String
+  reverseShipmentId String?
+  inventoryReceivedAt DateTime?
+  refundApprovalId String?
+}
+
+
+model WebhookReceipt {
+  id String @id @default(cuid())
+  source String
+  deliveryId String
+  verified Boolean
+  receivedAt DateTime @default(now())
+  payloadKey String
+  @@unique([source, deliveryId])
+}
+
+model Job {
+  id String @id @default(cuid())
+  kind String
+  state String
+  attempts Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+}
+
+model ReportJob {
+  id String @id @default(cuid())
+  kind String
+  params Json
+  state String
+  requestedBy String
+  outputKey String?
+  piiIncluded Boolean @default(false)
+}
+
+model AuditEvent {
+  id String @id @default(cuid())
+  at DateTime @default(now())
+  actorId String
+  action String
+  entity String
+  entityId String
+  before Json?
+  after Json?
+  correlationId String
+}
+
+model MigrationCheckpoint {
+  id String @id @default(cuid())
+  source String
+  fileSha256 String
+  rowsImported Int
+  importedAt DateTime @default(now())
+  @@unique([source, fileSha256])
+}
