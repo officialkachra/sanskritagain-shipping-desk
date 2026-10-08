@@ -1,6 +1,6 @@
 // Signed session cookie (HMAC-SHA256 via Web Crypto; works in Edge middleware and Node).
 // DEMO auth only. Production plan: maintained auth library + MFA + server-side revocation.
-export type Role = "ADMIN" | "PACKER";
+export type Role = "ADMIN" | "PACKER" | "SUPPORT";
 export interface Session { user: string; role: Role; exp: number }
 export const COOKIE = "sd_session";
 const enc = new TextEncoder();
@@ -33,6 +33,6 @@ export async function verify(token: string | undefined): Promise<Session | null>
   if (!ok) return null;
   try {
     const s = JSON.parse(new TextDecoder().decode(fromB64url(body))) as Session;
-    return s.exp > Date.now() && (s.role === "ADMIN" || s.role === "PACKER") ? s : null;
+    return s.exp > Date.now() && ["ADMIN", "PACKER", "SUPPORT"].includes(s.role) ? s : null;
   } catch { return null; }
 }

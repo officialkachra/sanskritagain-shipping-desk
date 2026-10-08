@@ -1,5 +1,5 @@
 import type { AllocationInput, BlacklistEntry, Quote, ServiceDef, ServiceabilityResult } from "../types";
-import type { RuleSetVersion } from "./rules";
+import type { AllocationPolicy, RuleSetVersion } from "./rules";
 
 export interface AllocationContext {
   now: Date;
@@ -12,12 +12,13 @@ export interface AllocationContext {
 
 export interface RankedService { serviceId: string; priority: number; quote: Quote | null; quoteState: "VALID" | "EXPIRED" | "MISSING" }
 export interface Exclusion { serviceId: string; priority: number; reasons: string[] }
+export type RecStatus = "RECOMMENDED" | "REVIEW_REQUIRED" | "NEEDS_POLICY_REVIEW" | "NO_ELIGIBLE";
 
 export interface RecommendationSnapshot {
   orderRef: string;
   ruleSetVersion: string;
   policyId: string | null;
-  status: "RECOMMENDED" | "REVIEW_REQUIRED" | "NO_ELIGIBLE";
+  status: RecStatus;
   reviewReasons: string[];
   eligible: RankedService[];
   excluded: Exclusion[];
@@ -25,27 +26,42 @@ export interface RecommendationSnapshot {
   createdAt: Date;
 }
 
-/** Pure, deterministic. Never books, never creates an AWB. */
+const selectable = (p: AllocationPolicy) => p.state === "ACTIVE" || p.state === "UNVERIFIED_MAPPING";
+
+export function matchPolicy(input: Pick<AllocationInput, "payment" | "direction" | "intent" | "destPincode">, rs: RuleSetVersion): AllocationPolicy | null {
+  return [...rs.policies].filter(selectable).sort((a, b) => a.priority - b.priority).find(p =>
+    p.match.payments.includes(input.payment) && p.match.direction === input.direction && p.match.intents.includes(input.intent) &&
+    (!p.scope?.destPincodes || p.scope.destPincodes.includes(input.destPincode))) ?? null;
+}
+
+/** Pure, deterministic. Order: eligibility → scoped constraints → ordered priorities. Never books. */
 export function allocate(input: AllocationInput, ctx: AllocationContext): RecommendationSnapshot {
   const trace: string[] = [];
   const reviewReasons: string[] = [];
   const base = { orderRef: input.orderRef, ruleSetVersion: ctx.ruleSet.version, createdAt: ctx.now };
 
-  if (input.intent === "UNKNOWN") reviewReasons.push(`Shipping intent unknown (raw method: ${input.rawShippingMethod ?? "none"})`);
+  if (input.intent === "UNKNOWN") reviewReasons.push(`Shipping method not mapped (raw: ${input.rawShippingMethod ?? "none"})`);
   if (!input.packingValidated) reviewReasons.push("Packing not validated (unknown SKU / unmapped variant / unvalidated bundle) — live booking blocked");
   if (input.packedWeightG === null) reviewReasons.push("Actual packed weight not recorded");
   if (!/^[1-9]\d{5}$/.test(input.destPincode)) reviewReasons.push(`Invalid destination pincode '${input.destPincode}'`);
   if (input.payment === "COD" && input.codAmountPaise <= 0) reviewReasons.push("COD order with non-positive collection amount");
 
-  const policy = ctx.ruleSet.policies.find(p => p.state !== "RETIRED" &&
-    p.match.payment === input.payment && p.match.direction === input.direction && p.match.intent === input.intent);
-  if (!policy) {
-    trace.push(`No policy for ${input.payment}/${input.direction}/${input.intent}`);
-    reviewReasons.push(`No allocation policy for ${input.payment} ${input.direction} ${input.intent}`);
-    return { ...base, policyId: null, status: "REVIEW_REQUIRED", reviewReasons, eligible: [], excluded: [], trace };
+  const policy = matchPolicy(input, ctx.ruleSet);
+  const isExpress = input.intent === "EXPRESS";
+  const expressPolicy = policy && policy.match.intents.length === 1 && policy.match.intents[0] === "EXPRESS";
+  let needsPolicy = false;
+  if (isExpress && !expressPolicy) {
+    needsPolicy = true;
+    reviewReasons.push("Express policy not decided — cannot book through a guessed policy");
+    if (policy?.scope?.destPincodes) reviewReasons.push(`Conflict: ${policy.name} applies to this pincode, but Express service is undecided. Needs an owner decision.`);
   }
-  trace.push(`Policy ${policy.id} (${policy.state}) order: ${policy.orderedServiceIds.join(" > ")}`);
-  if (policy.state === "DRAFT_UNVERIFIED") reviewReasons.push(`Policy ${policy.id} is DRAFT_UNVERIFIED — needs verified priority export before activation`);
+  if (!policy) {
+    trace.push(`No policy for ${input.payment}/${input.direction}/${input.intent}/${input.destPincode}`);
+    if (!needsPolicy) reviewReasons.push(`No allocation policy for ${input.payment} ${input.direction} ${input.intent}`);
+    return { ...base, policyId: null, status: needsPolicy ? "NEEDS_POLICY_REVIEW" : "REVIEW_REQUIRED", reviewReasons, eligible: [], excluded: [], trace };
+  }
+  trace.push(`Policy ${policy.id} (P${policy.priority}, ${policy.state}${policy.exclusive ? ", exclusive" : ""}): ${policy.orderedServiceIds.join(" > ")}`);
+  if (policy.state === "UNVERIFIED_MAPPING") reviewReasons.push(`Policy ${policy.id}: account/service mapping not verified — review before booking`);
 
   const eligible: RankedService[] = [];
   const excluded: Exclusion[] = [];
@@ -63,10 +79,8 @@ export function allocate(input: AllocationInput, ctx: AllocationContext): Recomm
     if (sv.serviceable === "UNKNOWN") reasons.push(`Serviceability unknown for ${input.destPincode}`);
     for (const b of ctx.blacklist) {
       if (b.expiresAt && b.expiresAt <= ctx.now) continue;
-      const hitSvc = !b.scope.serviceId || b.scope.serviceId === sid;
-      const hitCar = !b.scope.carrier || b.scope.carrier === svc.carrier;
-      const hitPin = !b.scope.pincode || b.scope.pincode === input.destPincode;
-      if (hitSvc && hitCar && hitPin) reasons.push(`Blacklist ${b.id} v${b.version}: ${b.reason}`);
+      const hit = (!b.scope.serviceId || b.scope.serviceId === sid) && (!b.scope.carrier || b.scope.carrier === svc.carrier) && (!b.scope.pincode || b.scope.pincode === input.destPincode);
+      if (hit) reasons.push(`Blacklist ${b.id} v${b.version}: ${b.reason}`);
     }
     if (reasons.length) { excluded.push({ serviceId: sid, priority, reasons }); trace.push(`P${priority} ${sid} EXCLUDED: ${reasons.join("; ")}`); return; }
     const q = ctx.quotes.get(sid) ?? null;
@@ -75,20 +89,20 @@ export function allocate(input: AllocationInput, ctx: AllocationContext): Recomm
     trace.push(`P${priority} ${sid} ELIGIBLE (quote ${quoteState}${sv.oda === true ? ", ODA" : ""})`);
   });
 
-  if (!policy.autoFallback && eligible.length && eligible[0]!.priority !== 1) reviewReasons.push("P1 unavailable and auto-fallback disabled");
-  if (eligible[0] && eligible[0].quoteState !== "VALID") reviewReasons.push(`Top service quote ${eligible[0].quoteState} — refresh before approval`);
+  if (eligible.length === 0 && policy.exclusive) trace.push("Exclusive policy: no fallback to other rules");
+  if (eligible[0] && eligible[0].quoteState !== "VALID") reviewReasons.push(`Top service quote ${eligible[0].quoteState.toLowerCase()} — refresh before approval`);
 
-  const status = eligible.length === 0 ? "NO_ELIGIBLE" : reviewReasons.length ? "REVIEW_REQUIRED" : "RECOMMENDED";
-  return { ...base, policyId: policy.id, status, reviewReasons, eligible, excluded, trace };
+  const status: RecStatus = needsPolicy ? "NEEDS_POLICY_REVIEW" : eligible.length === 0 ? "NO_ELIGIBLE" : reviewReasons.length ? "REVIEW_REQUIRED" : "RECOMMENDED";
+  return { ...base, policyId: policy.id, status, reviewReasons, eligible: needsPolicy ? [] : eligible, excluded, trace };
 }
 
-/** Rerun comparison: warns when default service or cost changed. Does not book. */
 export function diffRecommendation(prev: RecommendationSnapshot, next: RecommendationSnapshot): string[] {
   const w: string[] = [];
   const a = prev.eligible[0], b = next.eligible[0];
   if (a?.serviceId !== b?.serviceId) w.push(`Default service changed: ${a?.serviceId ?? "none"} → ${b?.serviceId ?? "none"}`);
   if (a && b && a.serviceId === b.serviceId && a.quote?.amountPaise !== b.quote?.amountPaise)
     w.push(`Quote changed: ${a.quote?.amountPaise ?? "unknown"} → ${b.quote?.amountPaise ?? "unknown"} paise`);
+  if (prev.status !== next.status) w.push(`Status changed: ${prev.status} → ${next.status}`);
   if (prev.ruleSetVersion !== next.ruleSetVersion) w.push(`Rule set changed: ${prev.ruleSetVersion} → ${next.ruleSetVersion}`);
   return w;
 }

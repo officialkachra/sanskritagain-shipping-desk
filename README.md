@@ -29,3 +29,16 @@ Next.js App Router, DEMO mode, synthetic orders. Requires two server env vars (n
     SESSION_SECRET=... DEMO_LOGIN_PASSWORD=... npm run dev
 
 Demo state is in memory and resets when the server restarts. Postgres ledger + worker come next.
+
+## Iteration 2 (ClickPost-style ops workspace, DEMO)
+New: sidebar shell, Dispatch stage tabs/filters/bulk/export, order detail tabs, Tracking, NDR desk, Manifest/handover,
+Rules cards + simulation, Reports (imported vs synthetic), Settings (config presence only). Core: 560064 BD-Surface-only
+rule (both payments), Express NEEDS_POLICY_REVIEW gate, CSV importer + reconciliation, Shopify webhook HMAC + order mapping
+(never books), server-side permissions, NDR action gates, manifest batching.
+
+    npm test                                   # 65 unit tests
+    npm run import:csv -- --profile clickpost --file /path/export.csv   # local reconciliation; persists nothing
+    python3 tests/e2e/e2e2.py                  # browser flows (needs app running on :3100 with DEMO_LOGIN_PASSWORD=localtestpw)
+
+Not done: Postgres persistence + durable worker, real Shopify sync, Blue Dart live adapter (contract needed),
+rule editor/drag reorder, import upload UI. Live writes are off everywhere.

@@ -17,17 +17,17 @@ describe("ordered allocation", () => {
     const r = allocate(order({ payment: "COD", codAmountPaise: 59900 }), ctx());
     expect(r.eligible.map(e => e.serviceId)).not.toContain(S.BD_AIR_PREPAID);
     expect(r.status).toBe("REVIEW_REQUIRED");
-    expect(r.reviewReasons.join()).toMatch(/DRAFT_UNVERIFIED/);
+    expect(r.reviewReasons.join()).toMatch(/mapping not verified/);
   });
   it("prepaid-only BD Surface config excluded for COD even if listed", () => {
-    const c = ctx(); c.ruleSet = { ...c.ruleSet, policies: [{ ...c.ruleSet.policies[1]!, orderedServiceIds: [S.BD_SURFACE_PREPAID, S.BD_AIR_PREPAID], state: "ACTIVE" }] };
+    const c = ctx(); c.ruleSet = { ...c.ruleSet, policies: [{ ...c.ruleSet.policies.find(p => p.id === "cod-forward-standard")!, orderedServiceIds: [S.BD_SURFACE_PREPAID, S.BD_AIR_PREPAID], state: "ACTIVE" }] };
     const r = allocate(order({ payment: "COD", codAmountPaise: 100 }), c);
     expect(r.status).toBe("NO_ELIGIBLE");
     expect(r.excluded.every(x => x.reasons.some(m => m.includes("COD not supported")))).toBe(true);
   });
-  it("Express without policy → review, not silently FORWARD", () => {
+  it("Express without policy → NEEDS_POLICY_REVIEW, not silently standard", () => {
     const r = allocate(order({ intent: "EXPRESS", rawShippingMethod: "Express Shipping" }), ctx());
-    expect(r.status).toBe("REVIEW_REQUIRED"); expect(r.eligible).toHaveLength(0);
+    expect(r.status).toBe("NEEDS_POLICY_REVIEW"); expect(r.eligible).toHaveLength(0);
   });
   it("unknown SKU packing blocks via review", () =>
     expect(allocate(order({ packingValidated: false }), ctx()).status).toBe("REVIEW_REQUIRED"));

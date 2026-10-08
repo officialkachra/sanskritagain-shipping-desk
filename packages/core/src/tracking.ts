@@ -25,3 +25,10 @@ export function mergeEvents(existing: TrackingEvent[], incoming: TrackingEvent[]
 
 export const currentStatus = (t: TrackingEvent[]) => t.length ? t[t.length - 1]!.canonical : null;
 export const shouldPoll = (t: TrackingEvent[]) => { const c = currentStatus(t); return c === null || !TERMINAL.has(c); };
+
+/** Stale when non-terminal and last successful fetch is older than the threshold. */
+export function trackingFreshness(t: TrackingEvent[], lastSuccessfulFetch: Date | null, now: Date, staleAfterH = 12): "FRESH" | "STALE" | "NEVER_FETCHED" | "TERMINAL" {
+  if (t.length && TERMINAL.has(t[t.length - 1]!.canonical)) return "TERMINAL";
+  if (!lastSuccessfulFetch) return "NEVER_FETCHED";
+  return now.getTime() - lastSuccessfulFetch.getTime() > staleAfterH * 36e5 ? "STALE" : "FRESH";
+}

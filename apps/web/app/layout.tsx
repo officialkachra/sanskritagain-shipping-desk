@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
-import Link from "next/link";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { getSession } from "@/lib/auth";
 import { logout } from "./actions";
+import { Shell } from "@/components/Shell";
 
-export const metadata: Metadata = { title: "Shipping Desk · SanskritAgain", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Shipping Desk · Sanskrit Again", robots: { index: false, follow: false } };
+export const viewport: Viewport = { width: "device-width", initialScale: 1 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const s = await getSession();
@@ -16,22 +17,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Devanagari:wght@400;600&display=swap" rel="stylesheet" />
       </head>
       <body>
-        {s ? (
-          <div className="shell">
-            <header className="top">
-              <Link href="/" className="brand">Shipping Desk</Link>
-              <nav>
-                <Link href="/">Orders / ऑर्डर</Link>
-                <Link href="/rules">Rules &amp; boxes</Link>
-                <Link href="/reports">Reports</Link>
-              </nav>
-              <span className="mode" title="Synthetic data. No courier or Shopify is contacted.">DEMO</span>
-              <span className="who">{s.user} · {s.role === "ADMIN" ? "Admin" : "Packer"}</span>
-              <form action={logout}><button className="link">Sign out</button></form>
-            </header>
-            <main>{children}</main>
-          </div>
-        ) : <main className="bare">{children}</main>}
+        {s ? <Shell user={s.user} role={s.role} mode="DEMO" logout={logout}>{children}</Shell> : <main className="bare">{children}</main>}
       </body>
     </html>
   );
